@@ -6,9 +6,11 @@ import (
 )
 
 func InitRouter(r *gin.Engine, userController *controller.User) {
-	//TODO: Add authorization middleware.
-	// Anyone can access the API right now.
+	r.Use(recoveryMiddleware())
+
 	userGroup := r.Group("/users")
+
+	userGroup.Use(recoveryMiddleware())
 
 	userHandler := NewUserHttpHandler(userGroup, userController)
 
