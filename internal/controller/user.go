@@ -1,18 +1,10 @@
 package controller
 
 import (
-	"errors"
 	"time"
 
 	"github.com/ProgressiveParanoia/go-game-server/internal/model"
 	"github.com/ProgressiveParanoia/go-game-server/internal/repo"
-)
-
-var (
-	ErrUserNotFound      = errors.New("user not found")
-	ErrDeviceIDNotFound  = errors.New("device ID not found")
-	ErrUserAlreadyExists = errors.New("user already exists")
-	ErrNoUsersFound      = errors.New("no users found")
 )
 
 type User struct {
@@ -27,7 +19,7 @@ func (u *User) Create(name, deviceID, pf string) (string, error) {
 
 	_, err := u.repo.GetByDeviceID(deviceID)
 	if err == nil {
-		return "", ErrUserAlreadyExists
+		return "", err
 	}
 
 	model := &model.User{
@@ -45,7 +37,7 @@ func (u *User) Create(name, deviceID, pf string) (string, error) {
 func (u *User) GetAll() ([]*model.User, error) {
 	users, err := u.repo.GetAll()
 	if err != nil {
-		return nil, ErrNoUsersFound
+		return nil, err
 	}
 	return users, nil
 }
@@ -53,7 +45,7 @@ func (u *User) GetAll() ([]*model.User, error) {
 func (u *User) GetByDeviceID(ID string) (*model.User, error) {
 	user, err := u.repo.GetByDeviceID(ID)
 	if err != nil {
-		return nil, ErrUserNotFound
+		return nil, err
 	}
 	return user, nil
 }
@@ -61,7 +53,7 @@ func (u *User) GetByDeviceID(ID string) (*model.User, error) {
 func (u *User) GetByID(ID string) (*model.User, error) {
 	user, err := u.repo.GetByID(ID)
 	if err != nil {
-		return nil, ErrUserNotFound
+		return nil, err
 	}
 	return user, nil
 }
@@ -69,7 +61,7 @@ func (u *User) GetByID(ID string) (*model.User, error) {
 func (u *User) Update(user *model.User) error {
 	existingUser, err := u.repo.GetByDeviceID(user.DeviceID)
 	if err != nil {
-		return ErrUserNotFound
+		return err
 	}
 
 	existingUser.Name = user.Name
@@ -82,7 +74,7 @@ func (u *User) Update(user *model.User) error {
 func (u *User) Delete(ID string) error {
 	_, err := u.repo.GetByDeviceID(ID)
 	if err != nil {
-		return ErrUserNotFound
+		return err
 	}
 	return u.repo.Delete(ID)
 }
