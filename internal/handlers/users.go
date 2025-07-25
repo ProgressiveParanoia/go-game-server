@@ -5,10 +5,12 @@ import (
 	"net/http"
 
 	"github.com/ProgressiveParanoia/go-game-server/internal/controller"
+	"github.com/ProgressiveParanoia/go-game-server/internal/errors"
 	"github.com/gin-gonic/gin"
 )
 
 type (
+	//TODO: create a client request file?
 	HttpNewUserPost struct {
 		Name           string `json:"name"`
 		DeviceID       string `json:"device_id"`
@@ -41,7 +43,6 @@ func (h *userHttpHandler) GetAllUsers(c *gin.Context) {
 	}
 
 	respSuccess(c, http.StatusOK, "users retrieved successfully", users)
-
 }
 
 func (h *userHttpHandler) GetUserByID(c *gin.Context) {
@@ -61,9 +62,24 @@ func (h *userHttpHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	if body.Name == "" {
+		respError(c, http.StatusBadRequest, errors.ErrNewUserNameEmpty.Error())
+		return
+	}
+
+	if body.DeviceID == "" {
+		respError(c, http.StatusBadRequest, errors.ErrNewUserDeviceIDEmpty.Error())
+		return
+	}
+
+	if body.ProfilePicture == "" {
+		respError(c, http.StatusBadRequest, errors.ErrNewUserProfilePicEmpty.Error())
+		return
+	}
+
 	newUserID, err := h.controller.Create(body.Name, body.DeviceID, body.ProfilePicture)
 	if err != nil {
-		if err == controller.ErrUserAlreadyExists {
+		if err == errors.ErrUserAlreadyExists {
 			respError(c, http.StatusConflict, "user already exists")
 			return
 		} else {
@@ -77,6 +93,6 @@ func (h *userHttpHandler) CreateUser(c *gin.Context) {
 		ID string `json:"id"`
 	}
 
-	respSuccess(c, http.StatusOK, "user successfully created",
+	respSuccess(c, http.StatusCreated, "user successfully created",
 		httpNewUserPostResponse{ID: newUserID})
 }
