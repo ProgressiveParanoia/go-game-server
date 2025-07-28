@@ -9,11 +9,15 @@ import (
 
 type RoomMemoryRepository struct {
 	rooms map[string]*game.Room
+
+	//maybe have this as a config?
+	maxPlayersPerRoom int
 }
 
-func NewRoomRepository() *RoomMemoryRepository {
+func NewRoomRepository(maxPlayersPerRoom int) *RoomMemoryRepository {
 	return &RoomMemoryRepository{
-		rooms: make(map[string]*game.Room),
+		rooms:             make(map[string]*game.Room),
+		maxPlayersPerRoom: maxPlayersPerRoom,
 	}
 }
 
@@ -31,12 +35,43 @@ func (rmr *RoomMemoryRepository) Create(room *game.Room) error {
 	return nil
 }
 
-func (rmr *RoomMemoryRepository) Join(id string) (string, error) {
-	if _, ok := rmr.rooms[id]; !ok {
-		return "", errors.ErrRoomNonExistent
+func (rmr *RoomMemoryRepository) Join(roomID, userID string) (*game.Room, error) {
+	rm, err := rmr.GetRoom(roomID)
+	if err != nil {
+		return nil, err
 	}
 
-	return "", nil
+	userInRoom := false
+	for _, id := range rm.Players {
+		if userID == id {
+			userInRoom = true
+			break
+		}
+	}
+
+	//NOTE: we'll only allow 1 session for now.
+	// Users existing in a room could mean also mean a user was abruptly disconnected
+	// so we'll add a reconnect option in the future
+	if userInRoom {
+		return nil, errors.ErrUserAlreadyJoinedRoom
+	}
+
+	if len(rm.Players)+1 > rmr.maxPlayersPerRoom {
+		return nil, errors.ErrRoomFull
+	}
+
+	rm.Players = append(rm.Players, userID)
+
+	return rm, nil
+}
+
+func (rmr *RoomMemoryRepository) GetRoom(roomID string) (*game.Room, error) {
+	rm, ok := rmr.rooms[roomID]
+	if !ok {
+		return nil, errors.ErrRoomNonExistent
+	}
+
+	return rm, nil
 }
 
 func (rmr *RoomMemoryRepository) Delete(id string) error {

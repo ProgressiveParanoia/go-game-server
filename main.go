@@ -12,7 +12,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Errorf("error running application %v")
+		fmt.Errorf("error running application %v", err)
 		os.Exit(1)
 	}
 }
@@ -22,11 +22,13 @@ func run() error {
 	r := gin.Default()
 
 	userRepo := memory.NewUserRepository()
+	roomRepo := memory.NewRoomRepository(2)
 
-	// Initialize the user controller
+	// Initialize controllers
 	userController := controller.NewUserController(userRepo)
+	roomController := controller.NewRoomController(roomRepo)
 
-	handlers.InitRouter(r, userController)
+	handlers.InitRouter(r, userController, roomController)
 
 	return nil
 }

@@ -19,9 +19,9 @@ type (
 
 	RoomRepository interface {
 		Create(room *game.Room) error
-		Join(id string) (*game.Room, error)
+		Join(roomID, userID string) (*game.Room, error)
 		Delete(id string) error
-
+		GetRoom(roomID string) (*game.Room, error)
 		//FOR DEBUGGING
 		GetAll() ([]*game.Room, error)
 	}
