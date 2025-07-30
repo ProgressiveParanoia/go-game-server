@@ -22,11 +22,10 @@ func run() error {
 	r := gin.Default()
 
 	userRepo := memory.NewUserRepository()
-	roomRepo := memory.NewRoomRepository(2)
 
 	// Initialize controllers
 	userController := controller.NewUserController(userRepo)
-	roomController := controller.NewRoomController(roomRepo)
+	roomController := controller.NewRoomController(nil)
 
 	handlers.InitRouter(r, userController, roomController)
 
