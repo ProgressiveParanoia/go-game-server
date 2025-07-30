@@ -24,26 +24,29 @@ type Room struct {
 	//TODO: keep track of separate rooms. Maybe spawn a go routine for each room?
 	// We are doing individual rooms for now
 
-	repo repo.RoomRepository
-
-	subscribersMux sync.Mutex
-	subscribers    map[*RoomSubscriber]struct{}
+	repo              repo.RoomRepository
+	ongoingMatches    map[string]*RoomMatch
+	ongoingMatchesMux sync.Mutex
 }
 
 type RoomSubscriber struct {
 	msgs chan []byte
 }
 
+type RoomMatch struct {
+	subscribersMux sync.Mutex
+	//todo: add identifier for subscribers or have a separate reference point for IDs
+	subscribers map[*RoomSubscriber]struct{}
+	CreatedAt   time.Time
+
+	isDone bool
+}
+
 func NewRoomController(repo repo.RoomRepository) *Room {
-
 	rm := &Room{
-		repo:        repo,
-		subscribers: make(map[*RoomSubscriber]struct{}),
+		repo:           repo,
+		ongoingMatches: make(map[string]*RoomMatch),
 	}
-
-	//for testing
-	randMessages := []string{"deez", "nuts", "hah", "got", "eeeem"}
-	go rm.noiseMaker(randMessages)
 
 	return rm
 }
@@ -51,60 +54,34 @@ func NewRoomController(repo repo.RoomRepository) *Room {
 func (rm *Room) Create() (string, error) {
 	id := uuid.New().String()
 
-	gameRoom := &game.Room{
-		ID:        id,
-		Players:   make([]string, PlayerCountInRooms),
-		CreatedAt: time.Now().UTC(),
+	m := &RoomMatch{
+		subscribers: make(map[*RoomSubscriber]struct{}),
+		CreatedAt:   time.Now().UTC(),
 	}
 
-	err := rm.repo.Create(gameRoom)
-	if err != nil {
-		return "", err
-	}
+	//for debugging purposes
+	randStuff := []string{"deez", "nuts", "in", "ya", "mouth", "mah neeeega"}
+	go m.noiseMaker(randStuff, id)
+
+	rm.ongoingMatches[id] = m
 
 	return id, nil
 }
 
-func (rm *Room) Join(roomID, userID string, w http.ResponseWriter, r *http.Request) (*game.Room, error) {
-
-	if roomID == "" {
-		return nil, errors.ErrEmptyRoomIDsNotAllowed
-	}
-
-	gameRoom, err := rm.repo.Join(roomID, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	return gameRoom, nil
-}
-
 func (rm *Room) SubscribeToRoom(roomID, userID string, w http.ResponseWriter, r *http.Request) error {
 
-	/*
-		ongoingGameRoom, err := rm.repo.GetRoom(roomID)
-		if err != nil {
-			return err
-		}
-
-		userInRoom := false
-		for _, id := range ongoingGameRoom.Players {
-			if userID == id {
-				userInRoom = true
-				break
-			}
-		}
-
-		if !userInRoom {
-			return errors.ErrUserNotJoinedPriorSub
-		}*/
+	match, ok := rm.ongoingMatches[roomID]
+	if !ok {
+		fmt.Println("content of ongoing matches: ", rm.ongoingMatches, " id passed: ", roomID)
+		return errors.ErrRoomNonExistent
+	}
 
 	rms := &RoomSubscriber{
 		msgs: make(chan []byte, SubscriberBufferLimit),
 	}
 
-	rm.addSubscriber(rms)
-	defer rm.removeSubscriber(rms)
+	match.addSubscriber(rms)
+	defer match.removeSubscriber(rms)
 
 	//create socket for client to connect to
 	c, err := websocket.Accept(w, r, nil)
@@ -131,42 +108,84 @@ func (rm *Room) SubscribeToRoom(roomID, userID string, w http.ResponseWriter, r 
 	}
 }
 
-// Debugging purposes. Just inject random stuff into the messages channel of every subscriber
-func (rm *Room) noiseMaker(randmsgs []string) {
+func (r *Room) GetRooms() ([]game.Room, error) {
+	room := make([]game.Room, 0)
 
+	for k, om := range r.ongoingMatches {
+		roomData := game.Room{
+			ID:        k,
+			Players:   []string{},
+			CreatedAt: om.CreatedAt,
+		}
+
+		room = append(room, roomData)
+	}
+
+	return room, nil
+}
+
+func (rm *Room) CleanUpEmptyRoomAfterDisconnect(roomID string) error {
+
+	m, ok := rm.ongoingMatches[roomID]
+
+	if !ok {
+		//return nil for now. Other subscribers may have cleaned up the room when the disconnect
+		return nil
+	}
+
+	if len(m.subscribers) != 0 {
+		return nil // Room not empty, so we return
+	}
+
+	rm.ongoingMatchesMux.Lock()
+	m.isDone = true
+	delete(rm.ongoingMatches, roomID)
+	defer rm.ongoingMatchesMux.Unlock()
+
+	return nil
+}
+
+// Debugging purposes. Just inject random stuff into the messages channel of every subscriber
+func (m *RoomMatch) noiseMaker(randmsgs []string, id string) {
 	for {
 		time.Sleep(5 * time.Second)
+
+		if m.isDone {
+			fmt.Println("\n\n\n\nStop making noise!")
+			return
+		}
+
 		randomIndex := rand.Intn(len(randmsgs))
 		msg := randmsgs[randomIndex]
 		byteMsg := []byte(msg)
 
-		for sub, _ := range rm.subscribers {
-
+		for sub, _ := range m.subscribers {
 			sub.msgs <- byteMsg
 		}
 
-		fmt.Printf("\n Sent message to subscribers %v in bytes %v \n sub size %v", msg, byteMsg, len(rm.subscribers))
+		fmt.Printf("\n [%v] Sent message to subscribers %v \n sub size %v", id, msg, len(m.subscribers))
 	}
 }
 
-func (rm *Room) addSubscriber(s *RoomSubscriber) {
-	rm.subscribersMux.Lock()
-	rm.subscribers[s] = struct{}{}
-	rm.subscribersMux.Unlock()
+func (m *RoomMatch) addSubscriber(s *RoomSubscriber) {
+	m.subscribersMux.Lock()
+	m.subscribers[s] = struct{}{}
+	m.subscribersMux.Unlock()
 }
 
-func (rm *Room) removeSubscriber(s *RoomSubscriber) {
-	rm.subscribersMux.Lock()
-	delete(rm.subscribers, s)
-	rm.subscribersMux.Unlock()
+func (m *RoomMatch) removeSubscriber(s *RoomSubscriber) {
+	m.subscribersMux.Lock()
+	delete(m.subscribers, s)
+	m.subscribersMux.Unlock()
 }
 
-func (rm *Room) Delete(id string) error {
-	return rm.repo.Delete(id)
-}
+func (r *Room) DeleteMatch(id string) error {
+	if _, ok := r.ongoingMatches[id]; !ok {
+		return errors.ErrRoomNonExistent
+	}
 
-func (rm *Room) GetAll() ([]*game.Room, error) {
-	return rm.repo.GetAll()
+	delete(r.ongoingMatches, id)
+	return nil
 }
 
 func writeTimeout(ctx context.Context, timeout time.Duration, c *websocket.Conn, msg []byte) error {
