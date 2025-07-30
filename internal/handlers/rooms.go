@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/ProgressiveParanoia/go-game-server/internal/controller"
@@ -30,10 +33,13 @@ func (h *roomsHttpHandler) RegisterRoutes() {
 }
 
 func (h *roomsHttpHandler) CreateRoom(c *gin.Context) {
+	//TODO: add
 	//does room exist?
 }
 
 func (h *roomsHttpHandler) JoinRoom(c *gin.Context) {
+
+	//TODO: add
 	//add myself to session, then create a socket?
 
 	//does the room exist?
@@ -43,12 +49,19 @@ func (h *roomsHttpHandler) JoinRoom(c *gin.Context) {
 }
 
 func (h *roomsHttpHandler) SubscribeToRoom(c *gin.Context) {
-	err := h.controller.SubscribeToRoom(c.Param("room_id"), c.Param("user_id"), c.Writer, c.Request)
+	roomId := c.Param("room_id")
+	userId := c.Param("user_id")
+	err := h.controller.SubscribeToRoom(roomId, userId, c.Writer, c.Request)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			fmt.Printf("\n user id %v has disconnected from room id %v\n", userId, roomId)
+			return
+		}
+
 		respError(c, http.StatusInternalServerError, err.Error())
 	}
 }
 
 func (h *roomsHttpHandler) GetRooms(c *gin.Context) {
-
+	// TODO: add
 }
